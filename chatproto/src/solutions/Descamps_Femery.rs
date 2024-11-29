@@ -8,10 +8,11 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-  client, core::{MessageServer, SpamChecker, MAILBOX_SIZE}, messages::{
+  core::{MessageServer, SpamChecker, MAILBOX_SIZE},
+  messages::{
     ClientError, ClientId, ClientMessage, ClientPollReply, ClientReply, FullyQualifiedMessage,
     Sequence, ServerId,
-  }
+  },
 };
 
 use crate::messages::{Outgoing, ServerMessage, ServerReply};
@@ -28,6 +29,7 @@ pub struct Server<C: SpamChecker> {
 struct ClientInfo {
   src_ip: IpAddr,
   name: String,
+  seqid: u128,
 }
 
 #[async_trait]
@@ -50,7 +52,7 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // each checks return
   async fn register_local_client(&self, src_ip: IpAddr, name: String) -> Option<ClientId> {
     let client = ClientId(Uuid::new_v4());
-    let client_info = ClientInfo { src_ip, name };
+    let client_info = ClientInfo { src_ip, name, seqid:0 };
     self.clients.write().await.insert(client, client_info);
     Some(client)
   }
@@ -58,10 +60,17 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   /*
    if the client is known, its last seen sequence number must be verified (and updated)
   */
+  // pub struct Sequence<A> {
+  //   pub seqid: u128,
+  //   pub src: ClientId,
+  //   pub content: A,
+  // }
+//pas read and write imbriqué
   async fn handle_sequenced_message<A: Send>(
     &self,
     sequence: Sequence<A>,
   ) -> Result<A, ClientError> {
+      let client = RwLock::read().await;
       let client_id = sequence.src;
       let mut metadata = self.clients.write().await;
   
@@ -89,13 +98,7 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
     both ClientMessage variants.
   */
   async fn handle_client_message(&self, src: ClientId, msg: ClientMessage) -> Vec<ClientReply> {
-    let mut replies = Vec::new();
-    {
-      let clients = self.clients.read().await;
-      if !clients.contains_key(&src) {
-        replies.push(ClientReply::Error:
-      }
-    }
+    todo!()
   }
 
   /* for the given client, return the next message or error if available
