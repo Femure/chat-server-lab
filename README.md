@@ -1,5 +1,5 @@
 # Rust lab work - chat service
-
+  
 ## Setup
 
 * install Rust

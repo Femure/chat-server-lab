@@ -12,14 +12,25 @@ use crate::messages::{
 // this function is used to encode all the "sizes" values that will appear after that
 pub fn u128<W>(w: &mut W, m: u128) -> std::io::Result<()>
 where
-  W: Write,
+    W: Write,
 {
-  if m < 251 {
-    w.write_u8(m as u8)
-  } else {
-    todo!()
-  }
+    if m < 251 {
+        w.write_u8(m as u8)
+    } else if m < (1 << 16) {
+        w.write_u8(251)?;
+        w.write_u16::<LittleEndian>(m as u16)
+    } else if m < (1 << 32) {
+        w.write_u8(252)?;
+        w.write_u32::<LittleEndian>(m as u32)
+    } else if m < (1 << 64) {
+        w.write_u8(253)?;
+        w.write_u64::<LittleEndian>(m as u64)
+    } else {
+        w.write_u8(254)?;
+        w.write_u128::<LittleEndian>(m)
+    }
 }
+
 
 /* UUIDs are 128bit values, but in the situation they are represented as [u8; 16]
   don't forget that arrays are encoded with their sizes first, and then their content
