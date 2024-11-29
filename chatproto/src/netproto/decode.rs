@@ -35,8 +35,7 @@ pub fn u128<R: Read>(rd: &mut R) -> anyhow::Result<u128> {
 }
 
 fn uuid<R: Read>(rd: &mut R) -> anyhow::Result<Uuid> {
-  rd.read_u8();
-  rd.read_exact(buf)
+  todo!()
 }
 
 // hint: reuse uuid
@@ -50,7 +49,10 @@ pub fn serverid<R: Read>(rd: &mut R) -> anyhow::Result<ServerId> {
 }
 
 pub fn string<R: Read>(rd: &mut R) -> anyhow::Result<String> {
-  todo!()
+  let size = u128(rd)? as usize;
+  let mut buf = vec![0u8; size];
+  rd.read_exact(&mut buf)?;
+  Ok(String::from_utf8(buf)?)
 }
 
 pub fn auth<R: Read>(rd: &mut R) -> anyhow::Result<AuthMessage> {
