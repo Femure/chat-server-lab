@@ -141,7 +141,7 @@ fn main() {
   let opt = Opt::from_args();
 
   let server =
-    chatproto::solutions::sample::Server::new(DefaultChecker::default(), ServerId::default());
+    chatproto::solutions::Descamps_Femery::Server::new(DefaultChecker::default(), ServerId::default());
   let clock = Arc::new(RwLock::new(server));
   let slock = clock.clone();
 
