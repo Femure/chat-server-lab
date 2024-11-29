@@ -65,38 +65,25 @@ pub fn string<R: Read>(rd: &mut R) -> anyhow::Result<String> {
 pub fn auth<R: Read>(rd: &mut R) -> anyhow::Result<AuthMessage> {
   let variant = rd.read_u8()?;
   match variant {
-      0 => {
-          let user = clientid(rd)?;
-          let mut nonce = [0u8; 8];
-          rd.read_exact(&mut nonce)?;
-          Ok(AuthMessage::Hello { user, nonce })
-      }
-      1 => {
-          let server = serverid(rd)?;
-          let mut nonce = [0u8; 8];
-          rd.read_exact(&mut nonce)?;
-          Ok(AuthMessage::Nonce { server, nonce })
-      }
-      2 => {
-          let mut response = [0u8; 16];
-          rd.read_exact(&mut response)?;
-          Ok(AuthMessage::Auth { response })
-      }
-      _ => Err(anyhow::anyhow!("Invalid AuthMessage")),
+    0 => {
+      let user = clientid(rd)?;
+      let mut nonce = [0u8; 8];
+      rd.read_exact(&mut nonce)?;
+      Ok(AuthMessage::Hello { user, nonce })
+    }
+    1 => {
+      let server = serverid(rd)?;
+      let mut nonce = [0u8; 8];
+      rd.read_exact(&mut nonce)?;
+      Ok(AuthMessage::Nonce { server, nonce })
+    }
+    2 => {
+      let mut response = [0u8; 16];
+      rd.read_exact(&mut response)?;
+      Ok(AuthMessage::Auth { response })
+    }
+    _ => Err(anyhow::anyhow!("Invalid AuthMessage")),
   }
-}
-
-
-pub fn client<R: Read>(rd: &mut R) -> anyhow::Result<ClientMessage> {
-  todo!()
-}
-
-pub fn client_replies<R: Read>(rd: &mut R) -> anyhow::Result<Vec<ClientReply>> {
-  todo!()
-}
-
-pub fn client_poll_reply<R: Read>(rd: &mut R) -> anyhow::Result<ClientPollReply> {
-  todo!()
 }
 
 pub fn server<R: Read>(rd: &mut R) -> anyhow::Result<ServerMessage> {
@@ -135,6 +122,52 @@ pub fn server<R: Read>(rd: &mut R) -> anyhow::Result<ServerMessage> {
     }
     _ => Err(anyhow::anyhow!("Invalid ServerMessage")),
   }
+}
+
+pub fn client<R: Read>(rd: &mut R) -> anyhow::Result<ClientMessage> {
+  let variant = rd.read_u8()?;
+  match variant {
+    0 => {
+      let dest = clientid(rd)?;
+      let content = string(rd)?;
+      Ok(ClientMessage::Text { dest, content })
+    }
+    1 => {
+      let nb_dest = u128(rd)? as usize;
+      let mut dest = Vec::new();
+      for _ in 0..nb_dest {
+        dest.push(clientid(rd)?);
+      }
+      let content = string(rd)?;
+      Ok(ClientMessage::MText { dest, content })
+    }
+    _ => Err(anyhow::anyhow!("Invalid ClientMessage")),
+  }
+}
+
+// match m {
+//   ClientMessage::Text { dest, content } => {
+//     w.write_u8(0)?;
+//     clientid(w, dest)?;
+//     string(w, content)?;
+//   }
+//   ClientMessage::MText { dest, content } => {
+//     w.write_u8(1)?;
+//     u128(w, dest.len() as u128)?;
+//     for d in dest {
+//       clientid(w, d)?;
+//     }
+//     string(w, content)?;
+//   }
+// }
+// Ok(())
+
+pub fn client_replies<R: Read>(rd: &mut R) -> anyhow::Result<Vec<ClientReply>> {
+  todo!()
+}
+
+pub fn client_poll_reply<R: Read>(rd: &mut R) -> anyhow::Result<ClientPollReply> {
+  todo!()
 }
 
 pub fn userlist<R: Read>(rd: &mut R) -> anyhow::Result<HashMap<ClientId, String>> {

@@ -137,7 +137,6 @@ where
         clientid(w, client)?;
         string(w, str)?;
       }
-      Ok(())
     }
     ServerMessage::Message(fully_qualified_message) => {
       w.write_u8(1)?;
@@ -151,9 +150,9 @@ where
       }
 
       string(w, &fully_qualified_message.content)?;
-      Ok(())
     }
   }
+  Ok(())
 }
 
 pub fn client<W>(w: &mut W, m: &ClientMessage) -> std::io::Result<()>
