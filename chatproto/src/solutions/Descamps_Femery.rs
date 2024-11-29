@@ -75,12 +75,13 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
     &self,
     sequence: Sequence<A>,
   ) -> Result<A, ClientError> {
-    let clients = self.clients.read().await;
-    let client = clients.get(&sequence.src);
+    let mut clients = self.clients.write().await;
+    let client = clients.get_mut(&sequence.src);
     match client {
       Some(client) => {
-        if client.seqid == sequence.seqid {
-          
+        if client.seqid < sequence.seqid {
+          client.seqid = sequence.seqid;
+          Ok(sequence.content)
         } else {
           Err(ClientError::InternalError)
         }
@@ -88,19 +89,6 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       None => Err(ClientError::UnknownClient),
     }
     
-
-    // let mut metadata = self.clients.write().await;
-
-    // if let Some((_, last_seq)) = metadata.get_mut(&client_id) {
-    //   if sequence.seqid <= *last_seq {
-    //     return Err(ClientError::UnknownClient);
-    //   }
-    //   *last_seq = sequence.seqid;
-
-    //   Ok(sequence.content)
-    // } else {
-    //   Err(ClientError::UnknownClient)
-    // }
   }
 
   /* Here client messages are handled.
