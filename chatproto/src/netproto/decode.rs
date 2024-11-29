@@ -62,8 +62,29 @@ pub fn string<R: Read>(rd: &mut R) -> anyhow::Result<String> {
 }
 
 pub fn auth<R: Read>(rd: &mut R) -> anyhow::Result<AuthMessage> {
-  todo!()
+  let variant = rd.read_u8()?;
+  match variant {
+      0 => {
+          let user = clientid(rd)?;
+          let mut nonce = [0u8; 8];
+          rd.read_exact(&mut nonce)?;
+          Ok(AuthMessage::Hello { user, nonce })
+      }
+      1 => {
+          let server = serverid(rd)?;
+          let mut nonce = [0u8; 8];
+          rd.read_exact(&mut nonce)?;
+          Ok(AuthMessage::Nonce { server, nonce })
+      }
+      2 => {
+          let mut response = [0u8; 16];
+          rd.read_exact(&mut response)?;
+          Ok(AuthMessage::Auth { response })
+      }
+      _ => Err(anyhow::anyhow!("Invalid AuthMessage")),
+  }
 }
+
 
 pub fn client<R: Read>(rd: &mut R) -> anyhow::Result<ClientMessage> {
   todo!()
