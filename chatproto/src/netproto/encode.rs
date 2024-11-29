@@ -140,13 +140,41 @@ where
 {
   match m {
     ServerMessage::Announce { route, clients } => {
-      Ok(for r in route{
-        serverid(w, r)?
-      })
-    },
-    ServerMessage::Message(fully_qualified_message) => todo!(),
+      w.write_u8(0)?;
+      u128(w, route.len() as u128)?;
+      for r in route {
+        serverid(w, r)?;
+      }
+      u128(w, clients.len() as u128)?;
+      for (client, str) in clients {
+        clientid(w, client)?;
+        string(w, str)?;
+      }
+      Ok(())
+    }
+    ServerMessage::Message(fully_qualified_message) => {
+      w.write_u8(1)?;
+      clientid(w, &fully_qualified_message.src)?;
+      serverid(w, &fully_qualified_message.srcsrv)?;
+
+      u128(w, fully_qualified_message.dsts.len() as u128)?;
+      for (cl, serv) in &fully_qualified_message.dsts {
+        clientid(w, cl)?;
+        serverid(w, serv)?;
+      }
+
+      string(w, &fully_qualified_message.content)?;
+      Ok(())
+    }
   }
 }
+
+// pub struct FullyQualifiedMessage {
+//   pub src: ClientId,
+//   pub srcsrv: ServerId,
+//   pub dsts: Vec<(ClientId, ServerId)>,
+//   pub content: String,
+// }
 
 pub fn client<W>(w: &mut W, m: &ClientMessage) -> std::io::Result<()>
 where
