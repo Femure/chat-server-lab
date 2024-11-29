@@ -4,7 +4,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use uuid::Uuid;
 
 use crate::messages::{
-  AuthMessage, ClientError, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, Sequence, ServerId, ServerMessage
+  AuthMessage, ClientError, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, Sequence, ServerId, ServerMessage, DelayedError
 };
 
 // look at the README.md for guidance on writing this function
@@ -216,7 +216,23 @@ pub fn client_poll_reply<W>(w: &mut W, m: &ClientPollReply) -> std::io::Result<(
 where
   W: Write,
 {
-  todo!()
+  match m {
+    ClientPollReply::Message { src, content } => {
+      w.write_u8(0)?;
+      clientid(w, src)?;
+      string(w, content)?;
+    }
+    ClientPollReply::DelayedError(delayed_error) => {
+      w.write_u8(1)?;
+      match delayed_error {
+        DelayedError::UnknownRecipient(client_id) => clientid(w, client_id)?,
+      }
+    }
+    ClientPollReply::Nothing => {
+      w.write_u8(2)?;
+    }
+  }
+  Ok(())
 }
 
 // hashmaps are encoded by first writing the size (using u128), then each key and values
@@ -224,7 +240,12 @@ pub fn userlist<W>(w: &mut W, m: &HashMap<ClientId, String>) -> std::io::Result<
 where
   W: Write,
 {
-  todo!()
+  u128(w, m.len() as u128)?;
+  for (client, str) in m {
+    clientid(w, client)?;
+    string(w, str)?;
+  }
+  Ok(())
 }
 
 pub fn client_query<W>(w: &mut W, m: &ClientQuery) -> std::io::Result<()>

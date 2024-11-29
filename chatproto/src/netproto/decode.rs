@@ -5,7 +5,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use uuid::Uuid;
 
 use crate::messages::{
-  AuthMessage, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply,
+  AuthMessage, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, DelayedError,
   FullyQualifiedMessage, Sequence, ServerId, ServerMessage,
 };
 
@@ -145,33 +145,36 @@ pub fn client<R: Read>(rd: &mut R) -> anyhow::Result<ClientMessage> {
   }
 }
 
-// match m {
-//   ClientMessage::Text { dest, content } => {
-//     w.write_u8(0)?;
-//     clientid(w, dest)?;
-//     string(w, content)?;
-//   }
-//   ClientMessage::MText { dest, content } => {
-//     w.write_u8(1)?;
-//     u128(w, dest.len() as u128)?;
-//     for d in dest {
-//       clientid(w, d)?;
-//     }
-//     string(w, content)?;
-//   }
-// }
-// Ok(())
-
 pub fn client_replies<R: Read>(rd: &mut R) -> anyhow::Result<Vec<ClientReply>> {
   todo!()
 }
 
 pub fn client_poll_reply<R: Read>(rd: &mut R) -> anyhow::Result<ClientPollReply> {
-  todo!()
+  let variant = rd.read_u8()?;
+  match variant {
+    0 => {
+      let src = clientid(rd)?;
+      let content = string(rd)?;
+      Ok(ClientPollReply::Message { src, content })
+    }
+    1 => {
+      let delayed_error = clientid(rd)?;
+      Ok(ClientPollReply::DelayedError(
+        DelayedError::UnknownRecipient(delayed_error),
+      ))
+    }
+    2 => Ok(ClientPollReply::Nothing),
+    _ => Err(anyhow::anyhow!("Invalid ClientPollReply")),
+  }
 }
 
 pub fn userlist<R: Read>(rd: &mut R) -> anyhow::Result<HashMap<ClientId, String>> {
-  todo!()
+  let nb_users = u128(rd)? as usize;
+  let mut users = HashMap::new();
+  for _ in 0..nb_users {
+    users.insert(clientid(rd)?, string(rd)?);
+  }
+  Ok(users)
 }
 
 pub fn client_query<R: Read>(rd: &mut R) -> anyhow::Result<ClientQuery> {
