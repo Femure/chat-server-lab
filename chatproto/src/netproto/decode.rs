@@ -217,8 +217,9 @@ pub fn client_query<R: Read>(rd: &mut R) -> anyhow::Result<ClientQuery> {
 }
 
 
-pub fn sequence<X, R: Read, DEC>(rd: &mut R, d: DEC) -> anyhow::Result<Sequence<X>>
+pub fn sequence<R, X, DEC>(rd: &mut R, d: DEC) -> anyhow::Result<Sequence<X>>
 where
+    R: Read,
     DEC: FnOnce(&mut R) -> anyhow::Result<X>,
 {
     let seqid = u128(rd)?;

@@ -273,10 +273,9 @@ where
 }
 
 
-pub fn sequence<X, W, ENC>(w: &mut W, m: &Sequence<X>, f: ENC) -> std::io::Result<()>
+pub fn sequence<W, X, ENC>(w: &mut W, m: &Sequence<X>, f: ENC) -> std::io::Result<()>
 where
     W: Write,
-    X: serde::Serialize,
     ENC: FnOnce(&mut W, &X) -> std::io::Result<()>,
 {
     u128(w, m.seqid)?;
