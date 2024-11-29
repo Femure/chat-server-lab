@@ -250,16 +250,38 @@ where
 
 pub fn client_query<W>(w: &mut W, m: &ClientQuery) -> std::io::Result<()>
 where
-  W: Write,
+    W: Write,
 {
-  todo!()
+    match m {
+        ClientQuery::Register(name) => {
+            w.write_u8(0)?;
+            string(w, name)?;
+        }
+        ClientQuery::Message(client_message) => {
+            w.write_u8(1)?;
+            client(w, client_message)?;
+        }
+        ClientQuery::Poll => {
+            w.write_u8(2)?;
+        }
+        ClientQuery::ListUsers => {
+            w.write_u8(3)?;
+        }
+    }
+
+    Ok(())
 }
+
 
 pub fn sequence<X, W, ENC>(w: &mut W, m: &Sequence<X>, f: ENC) -> std::io::Result<()>
 where
-  W: Write,
-  X: serde::Serialize,
-  ENC: FnOnce(&mut W, &X) -> std::io::Result<()>,
+    W: Write,
+    X: serde::Serialize,
+    ENC: FnOnce(&mut W, &X) -> std::io::Result<()>,
 {
-  todo!()
+    u128(w, m.seqid)?;
+    clientid(w, &m.src)?;
+    f(w, &m.content)?;
+    Ok(())
 }
+

@@ -5,8 +5,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use uuid::Uuid;
 
 use crate::messages::{
-  AuthMessage, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, DelayedError,
-  FullyQualifiedMessage, Sequence, ServerId, ServerMessage,
+  AuthMessage, ClientError, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, DelayedError, FullyQualifiedMessage, Sequence, ServerId, ServerMessage
 };
 
 // look at the README.md for guidance on writing this function
@@ -146,8 +145,37 @@ pub fn client<R: Read>(rd: &mut R) -> anyhow::Result<ClientMessage> {
 }
 
 pub fn client_replies<R: Read>(rd: &mut R) -> anyhow::Result<Vec<ClientReply>> {
-  todo!()
+  let nb_replies = u128(rd)? as usize;
+  let mut replies = Vec::with_capacity(nb_replies);
+
+  for _ in 0..nb_replies {
+      let variant = rd.read_u8()?;
+      let reply = match variant {
+          0 => ClientReply::Delivered,
+          1 => {
+              let error_variant = rd.read_u8()?;
+              let error = match error_variant {
+                  0 => ClientError::UnknownClient,
+                  1 => ClientError::BoxFull(clientid(rd)?),
+                  2 => ClientError::InternalError,
+                  _ => return Err(anyhow::anyhow!("Invalid ClientError variant")),
+              };
+              ClientReply::Error(error)
+          }
+          2 => ClientReply::Delayed,
+          3 => {
+              let server_id = serverid(rd)?;
+              let server_message = server(rd)?;
+              ClientReply::Transfer(server_id, server_message)
+          }
+          _ => return Err(anyhow::anyhow!("Invalid ClientReply variant")),
+      };
+      replies.push(reply);
+  }
+
+  Ok(replies)
 }
+
 
 pub fn client_poll_reply<R: Read>(rd: &mut R) -> anyhow::Result<ClientPollReply> {
   let variant = rd.read_u8()?;
@@ -178,12 +206,23 @@ pub fn userlist<R: Read>(rd: &mut R) -> anyhow::Result<HashMap<ClientId, String>
 }
 
 pub fn client_query<R: Read>(rd: &mut R) -> anyhow::Result<ClientQuery> {
-  todo!()
+  let variant = rd.read_u8()?;
+  match variant {
+      0 => Ok(ClientQuery::Register(string(rd)?)),
+      1 => Ok(ClientQuery::Message(client(rd)?)),
+      2 => Ok(ClientQuery::Poll),
+      3 => Ok(ClientQuery::ListUsers),
+      _ => Err(anyhow::anyhow!("Invalid ClientQuery variant")),
+  }
 }
+
 
 pub fn sequence<X, R: Read, DEC>(rd: &mut R, d: DEC) -> anyhow::Result<Sequence<X>>
 where
-  DEC: FnOnce(&mut R) -> anyhow::Result<X>,
+    DEC: FnOnce(&mut R) -> anyhow::Result<X>,
 {
-  todo!()
+    let seqid = u128(rd)?;
+    let src = clientid(rd)?;
+    let content = d(rd)?;
+    Ok(Sequence { seqid, src, content })
 }

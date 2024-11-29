@@ -129,7 +129,6 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   async fn route_to(&self, destination: ServerId) -> Option<Vec<ServerId>> {
     todo!()
   }
-}
 
 impl<C: SpamChecker + Sync + Send> Server<C> {
   // write your own methods here
