@@ -21,8 +21,13 @@ use crate::messages::{Outgoing, ServerMessage, ServerReply};
 // this will include things like delivered messages, clients last seen sequence number, etc.
 pub struct Server<C: SpamChecker> {
   checker: C,
-  clients: RwLock<HashMap<ClientId, String>>,
+  clients: RwLock<HashMap<ClientId, ClientInfo>>,
   // add things here
+}
+
+struct ClientInfo {
+  src_ip: IpAddr,
+  name: String,
 }
 
 #[async_trait]
@@ -40,11 +45,10 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // for spam checking, you will need to run both checks in parallel, and take a decision as soon as
   // each checks return
   async fn register_local_client(&self, src_ip: IpAddr, name: String) -> Option<ClientId> {
-    let id = Uuid::new_v4();
-    self.clients.write(HashMap::new((src_ip, name))).await;
-    RwLock::new(id);
-    // (RwLock)
-    Some(ClientId(id))
+    let client = ClientId(Uuid::new_v4());
+    let client_info = ClientInfo { src_ip, name };
+    self.clients.write().await.insert(client,client_info);
+    Some(client)
   }
 
   /*
