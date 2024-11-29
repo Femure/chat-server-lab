@@ -89,11 +89,45 @@ pub fn client<R: Read>(rd: &mut R) -> anyhow::Result<ClientMessage> {
   let variant = rd.read_u8()?;
   match variant {
     0 => {
-      u128(rd)?;
+      let nb_routes = u128(rd)? as i32;
+      for r in 0..nb_routes {
+        
+      }
+      Ok(())
     }
     1 => {}
   }
 }
+
+// match m {
+//   ServerMessage::Announce { route, clients } => {
+//     w.write_u8(0)?;
+//     u128(w, route.len() as u128)?;
+//     for r in route {
+//       serverid(w, r)?;
+//     }
+//     u128(w, clients.len() as u128)?;
+//     for (client, str) in clients {
+//       clientid(w, client)?;
+//       string(w, str)?;
+//     }
+//     Ok(())
+//   }
+//   ServerMessage::Message(fully_qualified_message) => {
+//     w.write_u8(1)?;
+//     clientid(w, &fully_qualified_message.src)?;
+//     serverid(w, &fully_qualified_message.srcsrv)?;
+
+//     u128(w, fully_qualified_message.dsts.len() as u128)?;
+//     for (cl, serv) in &fully_qualified_message.dsts {
+//       clientid(w, cl)?;
+//       serverid(w, serv)?;
+//     }
+
+//     string(w, &fully_qualified_message.content)?;
+//     Ok(())
+//   }
+// }
 
 pub fn client_replies<R: Read>(rd: &mut R) -> anyhow::Result<Vec<ClientReply>> {
   todo!()
