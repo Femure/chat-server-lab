@@ -21,6 +21,7 @@ use crate::messages::{Outgoing, ServerMessage, ServerReply};
 // this will include things like delivered messages, clients last seen sequence number, etc.
 pub struct Server<C: SpamChecker> {
   checker: C,
+  id: ServerId,
   clients: RwLock<HashMap<ClientId, ClientInfo>>,
   // add things here
 }
@@ -35,7 +36,11 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   const GROUP_NAME: &'static str = "Descamps Femery";
 
   fn new(checker: C, id: ServerId) -> Self {
-    todo!()
+    Server {
+      checker,
+      id,
+      clients: RwLock::new(HashMap::new()),
+    }
   }
 
   // note: you need to roll a Uuid, and then convert it into a ClientId
@@ -47,7 +52,7 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   async fn register_local_client(&self, src_ip: IpAddr, name: String) -> Option<ClientId> {
     let client = ClientId(Uuid::new_v4());
     let client_info = ClientInfo { src_ip, name };
-    self.clients.write().await.insert(client,client_info);
+    self.clients.write().await.insert(client, client_info);
     Some(client)
   }
 
