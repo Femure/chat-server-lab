@@ -39,7 +39,7 @@ fn uuid<W>(w: &mut W, m: &Uuid) -> std::io::Result<()>
 where
   W: Write,
 {
-  w.write_u8(16);
+  let _ = w.write_u8(16);
   w.write_all(m.as_bytes())
 }
 

@@ -13,39 +13,45 @@ pub fn u128<R: Read>(rd: &mut R) -> anyhow::Result<u128> {
   let prefix = rd.read_u8()?;
 
   match prefix {
-      0..=250 => Ok(prefix as u128),
-      251 => {
-          let value = rd.read_u16::<LittleEndian>()?;
-          Ok(value as u128)
-      }
-      252 => {
-          let value = rd.read_u32::<LittleEndian>()?;
-          Ok(value as u128)
-      }
-      253 => {
-          let value = rd.read_u64::<LittleEndian>()?;
-          Ok(value as u128)
-      }
-      254 => {
-          let value = rd.read_u128::<LittleEndian>()?;
-          Ok(value)
-      }
-      _ => Err(anyhow::anyhow!("Invalid prefix byte for u128 encoding")),
+    0..=250 => Ok(prefix as u128),
+    251 => {
+      let value = rd.read_u16::<LittleEndian>()?;
+      Ok(value as u128)
+    }
+    252 => {
+      let value = rd.read_u32::<LittleEndian>()?;
+      Ok(value as u128)
+    }
+    253 => {
+      let value = rd.read_u64::<LittleEndian>()?;
+      Ok(value as u128)
+    }
+    254 => {
+      let value = rd.read_u128::<LittleEndian>()?;
+      Ok(value)
+    }
+    _ => Err(anyhow::anyhow!("Invalid prefix byte for u128 encoding")),
   }
 }
 
 fn uuid<R: Read>(rd: &mut R) -> anyhow::Result<Uuid> {
-  todo!()
+  if rd.read_u8().unwrap() == 16 {
+    let mut buffer = [0; 16];
+    rd.read_exact(&mut buffer)?;
+    Ok(Uuid::from_bytes(buffer))
+  } else {
+    Err(anyhow::anyhow!("Invalid prefix byte for u8 encoding"))
+  }
 }
 
 // hint: reuse uuid
 pub fn clientid<R: Read>(rd: &mut R) -> anyhow::Result<ClientId> {
-  todo!()
+  Ok(ClientId(uuid(rd)?))
 }
 
 // hint: reuse uuid
 pub fn serverid<R: Read>(rd: &mut R) -> anyhow::Result<ServerId> {
-  todo!()
+  Ok(ServerId(uuid(rd)?))
 }
 
 pub fn string<R: Read>(rd: &mut R) -> anyhow::Result<String> {
