@@ -1,6 +1,7 @@
 use std::{collections::HashMap, io::Write};
 
 use byteorder::{LittleEndian, WriteBytesExt};
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::messages::{
@@ -12,25 +13,24 @@ use crate::messages::{
 // this function is used to encode all the "sizes" values that will appear after that
 pub fn u128<W>(w: &mut W, m: u128) -> std::io::Result<()>
 where
-    W: Write,
+  W: Write,
 {
-    if m < 251 {
-        w.write_u8(m as u8)
-    } else if m < (1 << 16) {
-        w.write_u8(251)?;
-        w.write_u16::<LittleEndian>(m as u16)
-    } else if m < (1 << 32) {
-        w.write_u8(252)?;
-        w.write_u32::<LittleEndian>(m as u32)
-    } else if m < (1 << 64) {
-        w.write_u8(253)?;
-        w.write_u64::<LittleEndian>(m as u64)
-    } else {
-        w.write_u8(254)?;
-        w.write_u128::<LittleEndian>(m)
-    }
+  if m < 251 {
+    w.write_u8(m as u8)
+  } else if m < (1 << 16) {
+    w.write_u8(251)?;
+    w.write_u16::<LittleEndian>(m as u16)
+  } else if m < (1 << 32) {
+    w.write_u8(252)?;
+    w.write_u32::<LittleEndian>(m as u32)
+  } else if m < (1 << 64) {
+    w.write_u8(253)?;
+    w.write_u64::<LittleEndian>(m as u64)
+  } else {
+    w.write_u8(254)?;
+    w.write_u128::<LittleEndian>(m)
+  }
 }
-
 
 /* UUIDs are 128bit values, but in the situation they are represented as [u8; 16]
   don't forget that arrays are encoded with their sizes first, and then their content
@@ -122,11 +122,30 @@ where
   }
 }
 
+// pub enum ServerMessage {
+//   /// Servers announcements
+//   Announce {
+//     /// The route is the list of servers that were traversed to reach us.
+//     /// The last element is the closest to us, and the first the farthest.
+//     route: Vec<ServerId>,
+//     /// list of clients registed on the source server, with their names
+//     clients: HashMap<ClientId, String>,
+//   },
+//   Message(FullyQualifiedMessage),
+// }
+
 pub fn server<W>(w: &mut W, m: &ServerMessage) -> std::io::Result<()>
 where
   W: Write,
 {
-  todo!()
+  match m {
+    ServerMessage::Announce { route, clients } => {
+      Ok(for r in route{
+        serverid(w, r)?
+      })
+    },
+    ServerMessage::Message(fully_qualified_message) => todo!(),
+  }
 }
 
 pub fn client<W>(w: &mut W, m: &ClientMessage) -> std::io::Result<()>
