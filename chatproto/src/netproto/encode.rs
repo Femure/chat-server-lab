@@ -121,18 +121,6 @@ where
   }
 }
 
-// pub enum ServerMessage {
-//   /// Servers announcements
-//   Announce {
-//     /// The route is the list of servers that were traversed to reach us.
-//     /// The last element is the closest to us, and the first the farthest.
-//     route: Vec<ServerId>,
-//     /// list of clients registed on the source server, with their names
-//     clients: HashMap<ClientId, String>,
-//   },
-//   Message(FullyQualifiedMessage),
-// }
-
 pub fn server<W>(w: &mut W, m: &ServerMessage) -> std::io::Result<()>
 where
   W: Write,
@@ -167,13 +155,6 @@ where
     }
   }
 }
-
-// pub struct FullyQualifiedMessage {
-//   pub src: ClientId,
-//   pub srcsrv: ServerId,
-//   pub dsts: Vec<(ClientId, ServerId)>,
-//   pub content: String,
-// }
 
 pub fn client<W>(w: &mut W, m: &ClientMessage) -> std::io::Result<()>
 where
