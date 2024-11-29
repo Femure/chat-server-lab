@@ -8,6 +8,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
+  client,
   core::{MessageServer, SpamChecker, MAILBOX_SIZE},
   messages::{
     ClientError, ClientId, ClientMessage, ClientPollReply, ClientReply, FullyQualifiedMessage,
@@ -52,7 +53,11 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // each checks return
   async fn register_local_client(&self, src_ip: IpAddr, name: String) -> Option<ClientId> {
     let client = ClientId(Uuid::new_v4());
-    let client_info = ClientInfo { src_ip, name, seqid:0 };
+    let client_info = ClientInfo {
+      src_ip,
+      name,
+      seqid: 0,
+    };
     self.clients.write().await.insert(client, client_info);
     Some(client)
   }
@@ -65,25 +70,35 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   //   pub src: ClientId,
   //   pub content: A,
   // }
-//pas read and write imbriqué
+  //pas read and write imbriqué
   async fn handle_sequenced_message<A: Send>(
     &self,
     sequence: Sequence<A>,
   ) -> Result<A, ClientError> {
-      let client = RwLock::read().await;
-      let client_id = sequence.src;
-      let mut metadata = self.clients.write().await;
-  
-      if let Some((_, last_seq)) = metadata.get_mut(&client_id) {
-        if sequence.seqid <= *last_seq {
-            return Err(ClientError::UnknownClient);
+    let clients = self.clients.read().await;
+    let client = clients.get(&sequence.src);
+    match client {
+      Some(client) => {
+        if client.seqid == sequence.seqid {
+          
+        } else {
+          Err(ClientError::InternalError)
         }
-        *last_seq = sequence.seqid;
-  
-        Ok(sequence.content)
-      } else {
-        Err(ClientError::UnknownClient)
       }
+      None => Err(ClientError::UnknownClient),
+    }
+
+    let mut metadata = self.clients.write().await;
+
+    if let Some((_, last_seq)) = metadata.get_mut(&client_id) {
+      if sequence.seqid <= *last_seq {
+        return Err(ClientError::UnknownClient);
+      }
+      *last_seq = sequence.seqid;
+
+      Ok(sequence.content)
+    } else {
+      Err(ClientError::UnknownClient)
     }
   }
 
