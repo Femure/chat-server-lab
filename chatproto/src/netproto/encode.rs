@@ -39,7 +39,8 @@ fn uuid<W>(w: &mut W, m: &Uuid) -> std::io::Result<()>
 where
   W: Write,
 {
-  todo!()
+  w.write_u8(16);
+  w.write_all(m.as_bytes())
 }
 
 // reuse uuid
@@ -47,7 +48,7 @@ pub fn clientid<W>(w: &mut W, m: &ClientId) -> std::io::Result<()>
 where
   W: Write,
 {
-  todo!()
+  uuid(w, &m.0)
 }
 
 // reuse uuid
@@ -55,7 +56,7 @@ pub fn serverid<W>(w: &mut W, m: &ServerId) -> std::io::Result<()>
 where
   W: Write,
 {
-  todo!()
+  uuid(w, &m.0)
 }
 
 // strings are encoded as the underlying bytes array

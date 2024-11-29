@@ -35,7 +35,8 @@ pub fn u128<R: Read>(rd: &mut R) -> anyhow::Result<u128> {
 }
 
 fn uuid<R: Read>(rd: &mut R) -> anyhow::Result<Uuid> {
-  todo!()
+  rd.read_u8();
+  rd.read_exact(buf)
 }
 
 // hint: reuse uuid
