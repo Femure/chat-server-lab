@@ -10,7 +10,28 @@ use crate::messages::{
 
 // look at the README.md for guidance on writing this function
 pub fn u128<R: Read>(rd: &mut R) -> anyhow::Result<u128> {
-  todo!()
+  let prefix = rd.read_u8()?;
+
+  match prefix {
+      0..=250 => Ok(prefix as u128),
+      251 => {
+          let value = rd.read_u16::<LittleEndian>()?;
+          Ok(value as u128)
+      }
+      252 => {
+          let value = rd.read_u32::<LittleEndian>()?;
+          Ok(value as u128)
+      }
+      253 => {
+          let value = rd.read_u64::<LittleEndian>()?;
+          Ok(value as u128)
+      }
+      254 => {
+          let value = rd.read_u128::<LittleEndian>()?;
+          Ok(value)
+      }
+      _ => Err(anyhow::anyhow!("Invalid prefix byte for u128 encoding")),
+  }
 }
 
 fn uuid<R: Read>(rd: &mut R) -> anyhow::Result<Uuid> {

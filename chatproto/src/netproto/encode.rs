@@ -67,7 +67,9 @@ pub fn string<W>(w: &mut W, m: &str) -> std::io::Result<()>
 where
   W: Write,
 {
-  todo!()
+  let bytes = m.as_bytes();
+  u128(w, bytes.len() as u128)?;
+  w.write_all(bytes)
 }
 
 /* The following is VERY mechanical, and should be easy once the general principle is understood
