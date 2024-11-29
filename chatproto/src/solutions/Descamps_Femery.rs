@@ -87,19 +87,20 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       }
       None => Err(ClientError::UnknownClient),
     }
+    
 
-    let mut metadata = self.clients.write().await;
+    // let mut metadata = self.clients.write().await;
 
-    if let Some((_, last_seq)) = metadata.get_mut(&client_id) {
-      if sequence.seqid <= *last_seq {
-        return Err(ClientError::UnknownClient);
-      }
-      *last_seq = sequence.seqid;
+    // if let Some((_, last_seq)) = metadata.get_mut(&client_id) {
+    //   if sequence.seqid <= *last_seq {
+    //     return Err(ClientError::UnknownClient);
+    //   }
+    //   *last_seq = sequence.seqid;
 
-      Ok(sequence.content)
-    } else {
-      Err(ClientError::UnknownClient)
-    }
+    //   Ok(sequence.content)
+    // } else {
+    //   Err(ClientError::UnknownClient)
+    // }
   }
 
   /* Here client messages are handled.
@@ -144,6 +145,7 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   async fn route_to(&self, destination: ServerId) -> Option<Vec<ServerId>> {
     todo!()
   }
+}
 
 impl<C: SpamChecker + Sync + Send> Server<C> {
   // write your own methods here
