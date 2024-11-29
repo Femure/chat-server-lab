@@ -128,7 +128,7 @@ pub enum ServerMessage {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum ClientError {
-  UnknownClient,  // client is unknown
+  UnknownClient, // client is unknown
   BoxFull(ClientId),
   InternalError,
 }

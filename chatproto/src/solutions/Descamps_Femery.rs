@@ -1,6 +1,6 @@
 use async_std::sync::RwLock;
-use futures::{future, select};
 use async_trait::async_trait;
+use futures::{future, select};
 use std::{
   collections::{HashMap, HashSet, VecDeque},
   net::IpAddr,

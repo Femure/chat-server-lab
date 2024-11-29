@@ -1,7 +1,6 @@
 use std::{collections::HashMap, io::Write};
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use serde::Serialize;
 use uuid::Uuid;
 
 use crate::messages::{
@@ -180,7 +179,22 @@ pub fn client<W>(w: &mut W, m: &ClientMessage) -> std::io::Result<()>
 where
   W: Write,
 {
-  todo!()
+  match m {
+    ClientMessage::Text { dest, content } => {
+      w.write_u8(0)?;
+      clientid(w, dest)?;
+      string(w, content)?;
+    }
+    ClientMessage::MText { dest, content } => {
+      w.write_u8(1)?;
+      u128(w, dest.len() as u128)?;
+      for d in dest {
+        clientid(w, d)?;
+      }
+      string(w, content)?;
+    }
+  }
+  Ok(())
 }
 
 pub fn client_replies<W>(w: &mut W, m: &[ClientReply]) -> std::io::Result<()>

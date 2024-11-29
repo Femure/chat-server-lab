@@ -140,8 +140,10 @@ fn main() {
   pretty_env_logger::init();
   let opt = Opt::from_args();
 
-  let server =
-    chatproto::solutions::Descamps_Femery::Server::new(DefaultChecker::default(), ServerId::default());
+  let server = chatproto::solutions::Descamps_Femery::Server::new(
+    DefaultChecker::default(),
+    ServerId::default(),
+  );
   let clock = Arc::new(RwLock::new(server));
   let slock = clock.clone();
 
