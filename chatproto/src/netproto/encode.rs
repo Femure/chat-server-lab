@@ -4,8 +4,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use uuid::Uuid;
 
 use crate::messages::{
-  AuthMessage, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, Sequence,
-  ServerId, ServerMessage,
+  AuthMessage, ClientError, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, Sequence, ServerId, ServerMessage
 };
 
 // look at the README.md for guidance on writing this function
@@ -181,7 +180,36 @@ pub fn client_replies<W>(w: &mut W, m: &[ClientReply]) -> std::io::Result<()>
 where
   W: Write,
 {
-  todo!()
+  for rep in m {
+  match rep {
+    ClientReply::Delivered => {
+      w.write_u8(0)?;
+    }
+    ClientReply::Error(error) => {
+      w.write_u8(1)?; // Variant ID for Error
+      match error {
+        ClientError::UnknownClient => {
+          w.write_u8(0)?;
+        }
+        ClientError::BoxFull(clientid) => {
+          w.write_u8(1)?;
+          crate::netproto::encode::clientid(w, clientid)?;
+        }
+        ClientError::InternalError => {
+          w.write_u8(2)?;
+        }
+      }
+  }
+    ClientReply::Delayed => {
+      w.write_u8(2)?;
+    }
+    ClientReply::Transfer(server_id, server_message) => {
+      w.write_u8(3)?;
+      serverid(w, server_id)?;
+      server(w, server_message)?;
+    }
+  }}
+  Ok(())
 }
 
 pub fn client_poll_reply<W>(w: &mut W, m: &ClientPollReply) -> std::io::Result<()>
