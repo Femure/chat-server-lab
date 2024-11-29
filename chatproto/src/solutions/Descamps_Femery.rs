@@ -8,11 +8,10 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-  core::{MessageServer, SpamChecker, MAILBOX_SIZE},
-  messages::{
+  client, core::{MessageServer, SpamChecker, MAILBOX_SIZE}, messages::{
     ClientError, ClientId, ClientMessage, ClientPollReply, ClientReply, FullyQualifiedMessage,
     Sequence, ServerId,
-  },
+  }
 };
 
 use crate::messages::{Outgoing, ServerMessage, ServerReply};
@@ -63,7 +62,20 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
     &self,
     sequence: Sequence<A>,
   ) -> Result<A, ClientError> {
-    todo!()
+      let client_id = sequence.src;
+      let mut metadata = self.clients.write().await;
+  
+      if let Some((_, last_seq)) = metadata.get_mut(&client_id) {
+        if sequence.seqid <= *last_seq {
+            return Err(ClientError::UnknownClient);
+        }
+        *last_seq = sequence.seqid;
+  
+        Ok(sequence.content)
+      } else {
+        Err(ClientError::UnknownClient)
+      }
+    }
   }
 
   /* Here client messages are handled.
@@ -77,7 +89,13 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
     both ClientMessage variants.
   */
   async fn handle_client_message(&self, src: ClientId, msg: ClientMessage) -> Vec<ClientReply> {
-    todo!()
+    let mut replies = Vec::new();
+    {
+      let clients = self.clients.read().await;
+      if !clients.contains_key(&src) {
+        replies.push(ClientReply::Error:
+      }
+    }
   }
 
   /* for the given client, return the next message or error if available
