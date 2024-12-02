@@ -11,8 +11,8 @@ use crate::{
   client,
   core::{MessageServer, SpamChecker, MAILBOX_SIZE},
   messages::{
-    ClientError, ClientId, ClientMessage, ClientPollReply, ClientReply, FullyQualifiedMessage,
-    Sequence, ServerId,
+    ClientError, ClientId, ClientMessage, ClientPollReply, ClientReply, DelayedError,
+    FullyQualifiedMessage, Sequence, ServerId,
   },
 };
 
@@ -31,6 +31,8 @@ struct ClientInfo {
   src_ip: IpAddr,
   name: String,
   seqid: u128,
+  mailbox_size: usize,
+  mailbox: Vec<(ClientId, String)>,
 }
 
 #[async_trait]
@@ -57,6 +59,8 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       src_ip,
       name,
       seqid: 0,
+      mailbox_size: 0,
+      mailbox: Vec::new(),
     };
     self.clients.write().await.insert(client, client_info);
     Some(client)
@@ -65,11 +69,6 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   /*
    if the client is known, its last seen sequence number must be verified (and updated)
   */
-  // pub struct Sequence<A> {
-  //   pub seqid: u128,
-  //   pub src: ClientId,
-  //   pub content: A,
-  // }
   //pas read and write imbriqué
   async fn handle_sequenced_message<A: Send>(
     &self,
@@ -88,27 +87,77 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       }
       None => Err(ClientError::UnknownClient),
     }
-    
   }
 
   /* Here client messages are handled.
     * if the client is local,
       * if the mailbox is full, BoxFull should be returned
       * otherwise, Delivered should be returned
-    * if the client is unknown, the message should be stored and Delayed must be returned
-    * (federation) if the client is remote, Transfer should be returned
+    * if the client is unknown, the message should be stored and Delayed must be returned (federation)
+    * if the client is remote, Transfer should be returned
 
     It is recommended to write an function that handles a single message and use it to handle
     both ClientMessage variants.
   */
   async fn handle_client_message(&self, src: ClientId, msg: ClientMessage) -> Vec<ClientReply> {
-    todo!()
+    match msg {
+      ClientMessage::Text { dest, content } => {
+        let mut client = self.clients.write().await;
+        let client = client.get_mut(&dest);
+        match client {
+          Some(client) => {
+            if client.mailbox_size == MAILBOX_SIZE {
+              vec![ClientReply::Error(ClientError::BoxFull(src))]
+            } else {
+              client.mailbox_size += 1;
+              client.mailbox.push((src, content));
+              vec![ClientReply::Delivered]
+            }
+          }
+          None => {
+            vec![ClientReply::Delayed]
+          }
+        }
+      }
+      ClientMessage::MText { dest, content } => {
+        let mut resp = vec![];
+        for dst in dest {
+          let mut client = self.clients.write().await;
+          let client = client.get_mut(&dst);
+          match client {
+            Some(client) => {
+              if client.mailbox_size == MAILBOX_SIZE {
+                resp.push(ClientReply::Error(ClientError::BoxFull(src)));
+              } else {
+                client.mailbox_size += 1;
+                client.mailbox.push((src, content.clone()));
+                resp.push(ClientReply::Delivered);
+              }
+            }
+            None => resp.push(ClientReply::Delayed),
+          }
+        }
+        resp
+      }
+    }
   }
 
   /* for the given client, return the next message or error if available
    */
   async fn client_poll(&self, client: ClientId) -> ClientPollReply {
-    todo!()
+    let mut clt = self.clients.write().await;
+    let clt = clt.get_mut(&client);
+    match clt {
+      Some(clt) => {
+        let (src, content) = match clt.mailbox.pop() {
+          Some(value) => value,
+          None => return ClientPollReply::Nothing,
+        };
+        clt.mailbox_size -= 1;
+        return ClientPollReply::Message { src, content };
+      }
+      None => return ClientPollReply::DelayedError(DelayedError::UnknownRecipient(client)),
+    }
   }
 
   /* For announces
