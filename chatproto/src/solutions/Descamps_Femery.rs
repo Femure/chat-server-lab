@@ -23,8 +23,8 @@ pub struct Server<C: SpamChecker> {
   checker: C,
   id: ServerId,
   clients: RwLock<HashMap<ClientId, Client>>,
-  routes: RwLock<HashMap<ClientId, Vec<ServerId>>>,
-  remote_clients: RwLock<HashMap<ClientId, String>>,
+  routes: RwLock<Vec<Vec<ServerId>>>,
+  remote_clients: RwLock<HashMap<ClientId, RemoteClient>>,
   stored_messages: RwLock<HashMap<ClientId, Message>>,
 }
 
@@ -35,9 +35,9 @@ struct Client {
   mailbox: VecDeque<(ClientId, String)>,
 }
 
-struct RemoteClient{
-  name: String,
-  srcsrv: ServerId
+struct RemoteClient {
+  _name: String,
+  srcsrv: ServerId,
 }
 
 struct Message {
@@ -54,7 +54,7 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       checker,
       id,
       clients: RwLock::new(HashMap::new()),
-      routes: RwLock::new(HashMap::new()),
+      routes: RwLock::new(Vec::new()),
       remote_clients: RwLock::new(HashMap::new()),
       stored_messages: RwLock::new(HashMap::new()),
     }
@@ -169,11 +169,11 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
         if route.is_empty() {
           return ServerReply::EmptyRoute;
         } else {
-          // Le serveur distant correspond au premier serveur ID de la route
-          let srv_dst = route.first().unwrap().clone();
+          // If not, store the route in some way associated from client_dst and the route
+          self.routes.write().await.push(route.clone());
 
-          // Le nexthop correspond au dernier serveur ID de la route
-          let nexthop = route.last().unwrap().clone();
+          let srv_dst = self.get_srv_dist(&route);
+          let nexthop = self.get_nexthop(&route);
 
           // On ajoute à la liste chaque message stored pour le client distant
           let mut resp = Vec::new();
@@ -181,14 +181,13 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
           for (client_dst, name) in clients {
             // On enregistre chaque client distant avec leur par leur ID client associé avec leur nom
             // Store the remote clients
-            self
-              .remote_clients
-              .write()
-              .await
-              .insert(client_dst, name.clone());
-
-            // If not, store the route in some way associated from client_dst and the route
-            self.routes.write().await.insert(client_dst, route.clone());
+            self.remote_clients.write().await.insert(
+              client_dst,
+              RemoteClient {
+                _name: name.clone(),
+                srcsrv: srv_dst,
+              },
+            );
 
             // if one of these remote clients has messages waiting, return them
             if let Some(message) = self.stored_messages.write().await.remove(&client_dst) {
@@ -212,7 +211,6 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       }
       ServerMessage::Message(fully_qualified_message) => {
         // Le client distant
-
         for (client_dst, server_dst) in fully_qualified_message.dsts.clone() {
           // Si le client distant correspond à client local on délivre le message
           let mut clients = self.clients.write().await;
@@ -229,8 +227,8 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
             None => return ServerReply::Error("Route for the client not found".to_string()),
           };
 
-          // Le nexthop correspond au premier serveur ID de la route
-          let nexthop = route.first().unwrap().clone();
+          let nexthop = self.get_nexthop(&route);
+
           return ServerReply::Outgoing(vec![Outgoing {
             nexthop,
             message: fully_qualified_message,
@@ -252,17 +250,34 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // return a route to the target server
   // bonus points if it is the shortest route
   async fn route_to(&self, destination: ServerId) -> Option<Vec<ServerId>> {
-    for (_, routes) in self.routes.read().await.iter() {
-      if routes.first().unwrap() == &destination {
-        let mut new_route = routes.clone();
-        new_route.push(self.id);
-        return Some(new_route.iter().rev().cloned().collect());
+    let routes_guard = self.routes.read().await; // Read lock for routes
+    let mut shortest_route: Option<Vec<ServerId>> = None;
+  
+    for route in routes_guard.iter() {
+      let mut current_route = vec![self.id]; // Start with the current server
+      let mut found = false; // Flag to indicate if the destination is found
+  
+      // Traverse the route in reverse order
+      for &srv in route.iter().rev() {
+        current_route.push(srv); // Add the server to the route
+  
+        if srv == destination {
+          found = true; // Destination found
+          break; // Stop traversal
+        }
+      }
+  
+      // If destination was found, validate and update the shortest route
+      if found {
+        if shortest_route.is_none() || current_route.len() < shortest_route.as_ref().unwrap().len() {
+          shortest_route = Some(current_route.clone()); // Update the shortest route
+        }
       }
     }
-    return None;
+  
+    shortest_route // Return the shortest route or None if no route was found
   }
 }
-
 impl<C: SpamChecker + Sync + Send> Server<C> {
   // write your own methods here
 
@@ -285,27 +300,22 @@ impl<C: SpamChecker + Sync + Send> Server<C> {
         let remote_client = self.remote_clients.write().await;
         match remote_client.get(&dest) {
           // if the client is remote, Transfer should be returned
-          Some(_) => {
-            let routes = self.routes.read().await;
-            let route = match routes.get(&dest) {
-              Some(value) => value,
-              None => return ClientReply::Error(ClientError::UnknownClient),
-            };
+          Some(client_remote_info) => {
+            for route in self.routes.read().await.iter() {
+              let srv_dst = self.get_srv_dist(&route);
+              let nexthop = self.get_nexthop(&route);
 
-            // Le serveur distant correspond au premier serveur ID de la route
-            let srv_dst = route.first().unwrap().clone();
-
-            // Le nexthop correspond au dernier serveur ID de la route
-            let nexthop = route.last().unwrap().clone();
-
-            let message = ServerMessage::Message(FullyQualifiedMessage {
-              src,
-              srcsrv: self.id,
-              dsts: vec![(dest, srv_dst)],
-              content,
-            });
-
-            return ClientReply::Transfer(nexthop, message);
+              if srv_dst == client_remote_info.srcsrv {
+                let message = ServerMessage::Message(FullyQualifiedMessage {
+                  src,
+                  srcsrv: self.id,
+                  dsts: vec![(dest, srv_dst)],
+                  content,
+                });
+                return ClientReply::Transfer(nexthop, message);
+              }
+            }
+            return ClientReply::Error(ClientError::UnknownClient);
           }
           // if the client is unknown, the message should be stored and Delayed must be returned (federation)
           None => {
@@ -319,6 +329,16 @@ impl<C: SpamChecker + Sync + Send> Server<C> {
         };
       }
     }
+  }
+
+  // Le serveur distant correspond au premier serveur ID de la route
+  fn get_srv_dist(&self, route: &Vec<ServerId>) -> ServerId {
+    route.first().unwrap().clone()
+  }
+
+  // Le nexthop correspond au premier serveur ID de la route
+  fn get_nexthop(&self, route: &Vec<ServerId>) -> ServerId {
+    route.last().unwrap().clone()
   }
 }
 

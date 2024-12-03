@@ -659,10 +659,10 @@ async fn all_tests<M: MessageServer<TestChecker>>(counter: &mut usize) -> anyhow
   // *counter += 1;
   routing_test::<M>().await.with_context(|| "real routing")?;
   *counter += 1;
-  // routing_test2::<M>()
-  //   .await
-  //   .with_context(|| "real routing 2")?;
-  // *counter += 1;
+  routing_test2::<M>()
+    .await
+    .with_context(|| "real routing 2")?;
+  *counter += 1;
   Ok(())
 }
 
