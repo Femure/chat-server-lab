@@ -1,9 +1,10 @@
-use async_std::sync::RwLock;
+use async_std::{future::timeout, sync::RwLock};
 use async_trait::async_trait;
 use futures::join;
 use std::{
   collections::{HashMap, VecDeque},
   net::IpAddr,
+  time::Duration,
 };
 use uuid::Uuid;
 
@@ -68,23 +69,33 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // each checks return
 
   async fn register_local_client(&self, src_ip: IpAddr, name: String) -> Option<ClientId> {
-    // Run spam checks in parallel
+    // timeout for the spam checks
+    let spam_check_timeout = Duration::from_secs(2);
+
     let (is_ip_spammer, is_user_spammer) = join!(
-      self.checker.is_ip_spammer(&src_ip),
-      self.checker.is_user_spammer(&name),
+      timeout(spam_check_timeout, self.checker.is_ip_spammer(&src_ip)),
+      timeout(spam_check_timeout, self.checker.is_user_spammer(&name)),
     );
 
-    // Only proceed if neither the IP nor the user is flagged as a spammer
-    if !is_ip_spammer && !is_user_spammer {
-      let client = ClientId(Uuid::new_v4());
-      let client_info = Client {
-        _src_ip: src_ip,
-        name,
-        seqid: 0,
-        mailbox: VecDeque::new(),
-      };
-      self.clients.write().await.insert(client, client_info);
-      return Some(client);
+    match (is_ip_spammer, is_user_spammer) {
+      (Ok(ip_result), Ok(user_result)) => {
+        // Only proceed if neither the IP nor the user is flagged as a spammer
+        if !ip_result && !user_result {
+          let client = ClientId(Uuid::new_v4());
+          let client_info = Client {
+            _src_ip: src_ip,
+            name,
+            seqid: 0,
+            mailbox: VecDeque::new(),
+          };
+          self.clients.write().await.insert(client, client_info);
+          return Some(client);
+        }
+      }
+      _ => {
+        // Handle timeout or error in spam checks (e.g., log a warning, or just return None)
+        eprintln!("Spam check timeout or error occurred");
+      }
     }
     None
   }
@@ -211,12 +222,11 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       }
       ServerMessage::Message(fully_qualified_message) => {
         // Le client distant
-        for (client_dst, server_dst) in fully_qualified_message.dsts.clone() {
+        if let Some((client_dst, server_dst)) = fully_qualified_message.dsts.clone().into_iter().next() {
           // Si le client distant correspond à client local on délivre le message
-          let mut clients = self.clients.write().await;
-          if let Some(info) = clients.get_mut(&client_dst) {
+          if let Some(info) = self.clients.write().await.get_mut(&client_dst) {
             info.mailbox.push_back((
-              fully_qualified_message.src.clone(),
+              fully_qualified_message.src,
               fully_qualified_message.content.clone(),
             ));
           }
@@ -243,39 +253,30 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
     let client_guard = self.clients.read().await;
     client_guard
       .iter()
-      .map(|(id, client)| (id.clone(), client.name.clone()))
+      .map(|(id, client)| (*id, client.name.clone()))
       .collect()
   }
 
   // return a route to the target server
   // bonus points if it is the shortest route
   async fn route_to(&self, destination: ServerId) -> Option<Vec<ServerId>> {
-    let routes_guard = self.routes.read().await; // Read lock for routes
     let mut shortest_route: Option<Vec<ServerId>> = None;
-  
-    for route in routes_guard.iter() {
-      let mut current_route = vec![self.id]; // Start with the current server
-      let mut found = false; // Flag to indicate if the destination is found
-  
-      // Traverse the route in reverse order
-      for &srv in route.iter().rev() {
-        current_route.push(srv); // Add the server to the route
-  
-        if srv == destination {
-          found = true; // Destination found
-          break; // Stop traversal
-        }
-      }
-  
-      // If destination was found, validate and update the shortest route
-      if found {
-        if shortest_route.is_none() || current_route.len() < shortest_route.as_ref().unwrap().len() {
-          shortest_route = Some(current_route.clone()); // Update the shortest route
+    for route in self.routes.read().await.iter() {
+      let mut current_route = Vec::new();
+      current_route.push(self.id);
+      for srv in route.iter().rev() {
+        current_route.push(*srv);
+        if *srv == destination {
+          if shortest_route.is_none()
+            || current_route.len() < shortest_route.as_ref().unwrap().len()
+          {
+            shortest_route = Some(current_route.clone());
+          }
+          break;
         }
       }
     }
-  
-    shortest_route // Return the shortest route or None if no route was found
+    shortest_route
   }
 }
 impl<C: SpamChecker + Sync + Send> Server<C> {
@@ -302,20 +303,20 @@ impl<C: SpamChecker + Sync + Send> Server<C> {
           // if the client is remote, Transfer should be returned
           Some(client_remote_info) => {
             for route in self.routes.read().await.iter() {
-              let srv_dst = self.get_srv_dist(&route);
-              let nexthop = self.get_nexthop(&route);
+              let srv_dst = self.get_srv_dist(route);
+              let nexthop = self.get_nexthop(route);
 
               if srv_dst == client_remote_info.srcsrv {
                 let message = ServerMessage::Message(FullyQualifiedMessage {
                   src,
                   srcsrv: self.id,
                   dsts: vec![(dest, srv_dst)],
-                  content,
+                  content: content.clone(),
                 });
                 return ClientReply::Transfer(nexthop, message);
               }
             }
-            return ClientReply::Error(ClientError::UnknownClient);
+            ClientReply::Error(ClientError::UnknownClient)
           }
           // if the client is unknown, the message should be stored and Delayed must be returned (federation)
           None => {
@@ -324,21 +325,21 @@ impl<C: SpamChecker + Sync + Send> Server<C> {
               .write()
               .await
               .insert(dest, Message { src, content });
-            return ClientReply::Delayed;
+            ClientReply::Delayed
           }
-        };
+        }
       }
     }
   }
 
   // Le serveur distant correspond au premier serveur ID de la route
-  fn get_srv_dist(&self, route: &Vec<ServerId>) -> ServerId {
-    route.first().unwrap().clone()
+  fn get_srv_dist(&self, route: &[ServerId]) -> ServerId {
+    *route.first().unwrap()
   }
 
   // Le nexthop correspond au premier serveur ID de la route
-  fn get_nexthop(&self, route: &Vec<ServerId>) -> ServerId {
-    route.last().unwrap().clone()
+  fn get_nexthop(&self, route: &[ServerId]) -> ServerId {
+    *route.last().unwrap()
   }
 }
 

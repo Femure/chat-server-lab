@@ -602,6 +602,7 @@ async fn routing_test2<M: MessageServer<TestChecker>>() -> anyhow::Result<()> {
   test_route(&server, s6, vec![sid, s1, s2, s6])
     .await
     .context("r2")?;
+  // TODO
   test_route(&server, s7, vec![sid, s5, s4, s7])
     .await
     .context("r3")?;
@@ -649,14 +650,14 @@ async fn all_tests<M: MessageServer<TestChecker>>(counter: &mut usize) -> anyhow
     .await
     .with_context(|| "message_to_outer_user_delayed")?;
   *counter += 1;
-  // spammer_delay_ip::<M>()
-  //   .await
-  //   .with_context(|| "spammer_delay_ip")?;
-  // *counter += 1;
-  // spammer_delay_user::<M>()
-  //   .await
-  //   .with_context(|| "spammer_delay_user")?;
-  // *counter += 1;
+  spammer_delay_ip::<M>()
+    .await
+    .with_context(|| "spammer_delay_ip")?;
+  *counter += 1;
+  spammer_delay_user::<M>()
+    .await
+    .with_context(|| "spammer_delay_user")?;
+  *counter += 1;
   routing_test::<M>().await.with_context(|| "real routing")?;
   *counter += 1;
   routing_test2::<M>()

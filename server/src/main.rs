@@ -1,7 +1,7 @@
 use async_std::net::UdpSocket;
 use async_std::sync::RwLock;
 use async_std::task;
-use chatproto::core::{DefaultChecker, MessageServer, SpamChecker};
+use chatproto::core::{DefaultChecker, MessageServer};
 use chatproto::messages::ServerReply;
 use chatproto::messages::{ClientError, ClientQuery, Sequence, ServerId};
 use chatproto::netproto::{decode, encode};
@@ -140,7 +140,7 @@ fn main() {
   pretty_env_logger::init();
   let opt = Opt::from_args();
 
-  let server = chatproto::solutions::Descamps_Femery::Server::new(
+  let server = chatproto::solutions::descamps_femery::Server::new(
     DefaultChecker::default(),
     ServerId::default(),
   );
