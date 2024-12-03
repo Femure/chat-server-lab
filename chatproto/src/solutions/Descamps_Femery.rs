@@ -23,15 +23,16 @@ use crate::messages::{Outgoing, ServerMessage, ServerReply};
 pub struct Server<C: SpamChecker> {
   checker: C,
   id: ServerId,
-  clients: RwLock<HashMap<ClientId, ClientInfo>>,
+  clients: RwLock<HashMap<ClientId, Client>>,
+  routes: RwLock<Vec<Vec<ServerId>>>,
+  remote_clients: RwLock<HashMap<ClientId, String>>,
   // add things here
 }
 
-struct ClientInfo {
+struct Client {
   src_ip: IpAddr,
   name: String,
   seqid: u128,
-  mailbox_size: usize,
   mailbox: Vec<(ClientId, String)>,
 }
 
@@ -44,6 +45,8 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       checker,
       id,
       clients: RwLock::new(HashMap::new()),
+      routes: RwLock::new(Vec::new()),
+      remote_clients: RwLock::new(HashMap::new()),
     }
   }
 
@@ -55,11 +58,10 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // each checks return
   async fn register_local_client(&self, src_ip: IpAddr, name: String) -> Option<ClientId> {
     let client = ClientId(Uuid::new_v4());
-    let client_info = ClientInfo {
+    let client_info = Client {
       src_ip,
       name,
       seqid: 0,
-      mailbox_size: 0,
       mailbox: Vec::new(),
     };
     self.clients.write().await.insert(client, client_info);
@@ -94,52 +96,24 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       * if the mailbox is full, BoxFull should be returned
       * otherwise, Delivered should be returned
     * if the client is unknown, the message should be stored and Delayed must be returned (federation)
-    * if the client is remote, Transfer should be returned
+    * TODO : if the client is remote, Transfer should be returned
 
     It is recommended to write an function that handles a single message and use it to handle
     both ClientMessage variants.
   */
   async fn handle_client_message(&self, src: ClientId, msg: ClientMessage) -> Vec<ClientReply> {
+    let mut resp = Vec::new();
     match msg {
       ClientMessage::Text { dest, content } => {
-        let mut client = self.clients.write().await;
-        let client = client.get_mut(&dest);
-        match client {
-          Some(client) => {
-            if client.mailbox_size == MAILBOX_SIZE {
-              vec![ClientReply::Error(ClientError::BoxFull(src))]
-            } else {
-              client.mailbox_size += 1;
-              client.mailbox.push((src, content));
-              vec![ClientReply::Delivered]
-            }
-          }
-          None => {
-            vec![ClientReply::Delayed]
-          }
-        }
+        resp.push(self.client_message(src, dest, content).await);
       }
       ClientMessage::MText { dest, content } => {
-        let mut resp = vec![];
         for dst in dest {
-          let mut client = self.clients.write().await;
-          let client = client.get_mut(&dst);
-          match client {
-            Some(client) => {
-              if client.mailbox_size == MAILBOX_SIZE {
-                resp.push(ClientReply::Error(ClientError::BoxFull(src)));
-              } else {
-                client.mailbox_size += 1;
-                client.mailbox.push((src, content.clone()));
-                resp.push(ClientReply::Delivered);
-              }
-            }
-            None => resp.push(ClientReply::Delayed),
-          }
+          resp.push(self.client_message(src, dst, content.clone()).await)
         }
-        resp
       }
     }
+    resp
   }
 
   /* for the given client, return the next message or error if available
@@ -153,7 +127,6 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
           Some(value) => value,
           None => return ClientPollReply::Nothing,
         };
-        clt.mailbox_size -= 1;
         return ClientPollReply::Message { src, content };
       }
       None => return ClientPollReply::DelayedError(DelayedError::UnknownRecipient(client)),
@@ -170,7 +143,38 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
      * if remote, forward them
   */
   async fn handle_server_message(&self, msg: ServerMessage) -> ServerReply {
-    todo!()
+    match msg {
+      ServerMessage::Announce { route, clients } => {
+        if route.is_empty() {
+          return ServerReply::EmptyRoute;
+        } else {
+          // Store the route
+          self.routes.write().await.push(route.clone());
+          // Store the remote clients
+          for (client_id, name) in clients {
+            self.remote_clients.write().await.insert(client_id, name);
+          }
+        }
+        ServerReply::Outgoing(vec![Outgoing {
+          nexthop: todo!(),
+          message: FullyQualifiedMessage {
+            src: todo!(),
+            srcsrv: todo!(),
+            dsts: todo!(),
+            content: todo!(),
+          },
+        }])
+      }
+      ServerMessage::Message(fully_qualified_message) => ServerReply::Outgoing(vec![Outgoing {
+        nexthop: todo!(),
+        message: FullyQualifiedMessage {
+          src: todo!(),
+          srcsrv: todo!(),
+          dsts: todo!(),
+          content: todo!(),
+        },
+      }]),
+    }
   }
 
   async fn list_users(&self) -> HashMap<ClientId, String> {
@@ -180,12 +184,36 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // return a route to the target server
   // bonus points if it is the shortest route
   async fn route_to(&self, destination: ServerId) -> Option<Vec<ServerId>> {
-    todo!()
+    let routes = self.routes.read().await;
+    routes
+      .iter()
+      .find(|&route| route.contains(&destination))
+      .cloned()
   }
 }
 
 impl<C: SpamChecker + Sync + Send> Server<C> {
   // write your own methods here
+  async fn client_message(&self, src: ClientId, dest: ClientId, content: String) -> ClientReply {
+    let mut client = self.clients.write().await;
+    let client = client.get_mut(&dest);
+    match client {
+      Some(client) => {
+        if client.mailbox.len() == MAILBOX_SIZE {
+          ClientReply::Error(ClientError::BoxFull(src))
+        } else {
+          client.mailbox.push((src, content));
+          ClientReply::Delivered
+        }
+      }
+      None => {
+        let mut remote_client = self.remote_clients.write().await.get_mut(&dest);
+        ClientReply::Delayed
+      },
+    }
+    // * if the client is unknown, the message should be stored and Delayed must be returned (federation)
+    // * TODO : if the client is remote, Transfer should be returned
+  }
 }
 
 #[cfg(test)]
