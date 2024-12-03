@@ -4,7 +4,8 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use uuid::Uuid;
 
 use crate::messages::{
-  AuthMessage, ClientError, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply, Sequence, ServerId, ServerMessage, DelayedError
+  AuthMessage, ClientError, ClientId, ClientMessage, ClientPollReply, ClientQuery, ClientReply,
+  DelayedError, Sequence, ServerId, ServerMessage,
 };
 
 // look at the README.md for guidance on writing this function
@@ -181,34 +182,35 @@ where
   W: Write,
 {
   for rep in m {
-  match rep {
-    ClientReply::Delivered => {
-      w.write_u8(0)?;
-    }
-    ClientReply::Error(error) => {
-      w.write_u8(1)?; // Variant ID for Error
-      match error {
-        ClientError::UnknownClient => {
-          w.write_u8(0)?;
-        }
-        ClientError::BoxFull(clientid) => {
-          w.write_u8(1)?;
-          crate::netproto::encode::clientid(w, clientid)?;
-        }
-        ClientError::InternalError => {
-          w.write_u8(2)?;
+    match rep {
+      ClientReply::Delivered => {
+        w.write_u8(0)?;
+      }
+      ClientReply::Error(error) => {
+        w.write_u8(1)?; // Variant ID for Error
+        match error {
+          ClientError::UnknownClient => {
+            w.write_u8(0)?;
+          }
+          ClientError::BoxFull(clientid) => {
+            w.write_u8(1)?;
+            crate::netproto::encode::clientid(w, clientid)?;
+          }
+          ClientError::InternalError => {
+            w.write_u8(2)?;
+          }
         }
       }
+      ClientReply::Delayed => {
+        w.write_u8(2)?;
+      }
+      ClientReply::Transfer(server_id, server_message) => {
+        w.write_u8(3)?;
+        serverid(w, server_id)?;
+        server(w, server_message)?;
+      }
+    }
   }
-    ClientReply::Delayed => {
-      w.write_u8(2)?;
-    }
-    ClientReply::Transfer(server_id, server_message) => {
-      w.write_u8(3)?;
-      serverid(w, server_id)?;
-      server(w, server_message)?;
-    }
-  }}
   Ok(())
 }
 
@@ -250,37 +252,35 @@ where
 
 pub fn client_query<W>(w: &mut W, m: &ClientQuery) -> std::io::Result<()>
 where
-    W: Write,
+  W: Write,
 {
-    match m {
-        ClientQuery::Register(name) => {
-            w.write_u8(0)?;
-            string(w, name)?;
-        }
-        ClientQuery::Message(client_message) => {
-            w.write_u8(1)?;
-            client(w, client_message)?;
-        }
-        ClientQuery::Poll => {
-            w.write_u8(2)?;
-        }
-        ClientQuery::ListUsers => {
-            w.write_u8(3)?;
-        }
+  match m {
+    ClientQuery::Register(name) => {
+      w.write_u8(0)?;
+      string(w, name)?;
     }
+    ClientQuery::Message(client_message) => {
+      w.write_u8(1)?;
+      client(w, client_message)?;
+    }
+    ClientQuery::Poll => {
+      w.write_u8(2)?;
+    }
+    ClientQuery::ListUsers => {
+      w.write_u8(3)?;
+    }
+  }
 
-    Ok(())
+  Ok(())
 }
-
 
 pub fn sequence<W, X, ENC>(w: &mut W, m: &Sequence<X>, f: ENC) -> std::io::Result<()>
 where
-    W: Write,
-    ENC: FnOnce(&mut W, &X) -> std::io::Result<()>,
+  W: Write,
+  ENC: FnOnce(&mut W, &X) -> std::io::Result<()>,
 {
-    u128(w, m.seqid)?;
-    clientid(w, &m.src)?;
-    f(w, &m.content)?;
-    Ok(())
+  u128(w, m.seqid)?;
+  clientid(w, &m.src)?;
+  f(w, &m.content)?;
+  Ok(())
 }
-
