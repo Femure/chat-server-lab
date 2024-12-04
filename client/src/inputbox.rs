@@ -55,6 +55,7 @@ impl IBox {
     new_cursor_pos.clamp(0, self.input.len())
   }
 
+  #[allow(dead_code)]
   pub fn reset_cursor(&mut self) {
     self.cursor_position = 0;
   }

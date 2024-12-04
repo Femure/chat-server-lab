@@ -300,10 +300,10 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       // Add neighbors to the queue
       if let Some(neighbors) = graph.get(&current) {
         for &neighbor in neighbors {
-          if !visited.contains_key(&neighbor) {
+          visited.entry(neighbor).or_insert_with(|| {
             queue.push_back(neighbor);
-            visited.insert(neighbor, Some(current)); // Track the predecessor
-          }
+            Some(current) // Track the predecessor
+          });
         }
       }
     }
@@ -313,7 +313,6 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
 }
 
 impl<C: SpamChecker + Sync + Send> Server<C> {
-
   async fn client_message(&self, src: ClientId, dest: ClientId, content: String) -> ClientReply {
     let mut client = self.clients.write().await;
     let client = client.get_mut(&dest);

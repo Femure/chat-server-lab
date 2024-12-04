@@ -358,7 +358,8 @@ mod test {
       content: "Hello".to_string(),
     };
     let encoded = &[
-      12, 16, 119, 255, 82, 158, 117, 189, 72, 50, 191, 12, 109, 179, 57, 2, 41, 36, 5, 72, 101, 108, 108, 111,
+      12, 16, 119, 255, 82, 158, 117, 189, 72, 50, 191, 12, 109, 179, 57, 2, 41, 36, 5, 72, 101,
+      108, 108, 111,
     ];
     round_trip::<Sequence<String>, _, _>(
       |w, seq| encode::sequence(w, seq, |w2, st| encode::string(w2, st.as_str())),
