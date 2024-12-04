@@ -602,7 +602,6 @@ async fn routing_test2<M: MessageServer<TestChecker>>() -> anyhow::Result<()> {
   test_route(&server, s6, vec![sid, s1, s2, s6])
     .await
     .context("r2")?;
-  // TODO
   test_route(&server, s7, vec![sid, s5, s4, s7])
     .await
     .context("r3")?;

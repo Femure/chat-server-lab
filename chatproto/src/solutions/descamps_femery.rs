@@ -222,7 +222,9 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
       }
       ServerMessage::Message(fully_qualified_message) => {
         // Le client distant
-        if let Some((client_dst, server_dst)) = fully_qualified_message.dsts.clone().into_iter().next() {
+        if let Some((client_dst, server_dst)) =
+          fully_qualified_message.dsts.clone().into_iter().next()
+        {
           // Si le client distant correspond à client local on délivre le message
           if let Some(info) = self.clients.write().await.get_mut(&client_dst) {
             info.mailbox.push_back((
@@ -260,27 +262,57 @@ impl<C: SpamChecker + Send + Sync> MessageServer<C> for Server<C> {
   // return a route to the target server
   // bonus points if it is the shortest route
   async fn route_to(&self, destination: ServerId) -> Option<Vec<ServerId>> {
-    let mut shortest_route: Option<Vec<ServerId>> = None;
+    let mut graph: HashMap<ServerId, Vec<ServerId>> = HashMap::new();
+
+    // Step 1: Build the graph
     for route in self.routes.read().await.iter() {
-      let mut current_route = Vec::new();
-      current_route.push(self.id);
-      for srv in route.iter().rev() {
-        current_route.push(*srv);
-        if *srv == destination {
-          if shortest_route.is_none()
-            || current_route.len() < shortest_route.as_ref().unwrap().len()
-          {
-            shortest_route = Some(current_route.clone());
+      for window in route.windows(2) {
+        let (a, b) = (window[0], window[1]);
+        graph.entry(a).or_default().push(b);
+        graph.entry(b).or_default().push(a); // Bidirectional edge
+      }
+      // Connect the self server to the nearest server in each route
+      if let Some(&first_server) = route.last() {
+        graph.entry(self.id).or_default().push(first_server);
+        graph.entry(first_server).or_default().push(self.id); // Bidirectional
+      }
+    }
+
+    // Step 2: BFS to find the shortest path
+    let mut queue = VecDeque::new();
+    let mut visited = HashMap::new(); // Track visited servers and their predecessors
+    queue.push_back(self.id);
+    visited.insert(self.id, None);
+
+    while let Some(current) = queue.pop_front() {
+      if current == destination {
+        // Step 3: Reconstruct the path
+        let mut path = Vec::new();
+        let mut node = Some(current);
+        while let Some(n) = node {
+          path.push(n);
+          node = visited.get(&n).and_then(|&v| v);
+        }
+        path.reverse();
+        return Some(path);
+      }
+
+      // Add neighbors to the queue
+      if let Some(neighbors) = graph.get(&current) {
+        for &neighbor in neighbors {
+          if !visited.contains_key(&neighbor) {
+            queue.push_back(neighbor);
+            visited.insert(neighbor, Some(current)); // Track the predecessor
           }
-          break;
         }
       }
     }
-    shortest_route
+
+    None // No path found
   }
 }
+
 impl<C: SpamChecker + Sync + Send> Server<C> {
-  // write your own methods here
 
   async fn client_message(&self, src: ClientId, dest: ClientId, content: String) -> ClientReply {
     let mut client = self.clients.write().await;

@@ -274,6 +274,7 @@ where
   Ok(())
 }
 
+// TODO
 pub fn sequence<W, X, ENC>(w: &mut W, m: &Sequence<X>, f: ENC) -> std::io::Result<()>
 where
   W: Write,
