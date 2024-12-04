@@ -61,3 +61,5 @@ $ RUST_LOG=debug cargo run --bin server
 $ RUST_LOG=debug cargo run --bin client -- --name my_name
 ...
 ```
+
+On a crée une branche avec une version détaillée des fonctions écrites dans `descamps_femery`. Enjoy ;)
